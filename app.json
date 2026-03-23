@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "FoodSpark Rider",
+    "slug": "foodspark-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "foodspark-rider",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.foodspark.rider" },
+    "android": { "package": "com.foodspark.rider" },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": ["expo-router", "expo-font"],
+    "experiments": { "typedRoutes": true }
+  }
+}
