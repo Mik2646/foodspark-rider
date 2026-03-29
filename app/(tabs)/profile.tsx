@@ -170,6 +170,24 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Delivery history */}
+      {history.filter(o => o.status === "delivered").length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>ประวัติการจัดส่ง</Text>
+          {history.filter(o => o.status === "delivered").slice(0, 10).map((o) => (
+            <View key={o.id} style={styles.historyRow}>
+              <View style={styles.historyLeft}>
+                <Text style={styles.historyName} numberOfLines={1}>{o.restaurantName}</Text>
+                <Text style={styles.historyDate}>
+                  {new Date(o.createdAt).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })}
+                </Text>
+              </View>
+              <Text style={styles.historyEarning}>+฿{Math.round(o.totalAmount * 0.1).toLocaleString()}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Help */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ความช่วยเหลือ</Text>
@@ -317,4 +335,9 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 15, fontWeight: "600", color: "#EF4444" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   editBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#E3F2FD", alignItems: "center", justifyContent: "center" },
+  historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#F5F5F5" },
+  historyLeft: { flex: 1 },
+  historyName: { fontSize: 14, color: "#333", fontWeight: "500" },
+  historyDate: { fontSize: 11, color: "#AAA", marginTop: 2 },
+  historyEarning: { fontSize: 15, fontWeight: "700", color: GREEN },
 });

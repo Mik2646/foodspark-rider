@@ -1,6 +1,7 @@
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
   ScrollView, Linking, Modal, TextInput, FlatList, KeyboardAvoidingView, Platform,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 import * as Location from "expo-location";
+import * as ImagePicker from "expo-image-picker";
 
 const BLUE = "#1E88E5";
 const GREEN = "#059669";
@@ -125,6 +127,7 @@ export default function ActiveDeliveryScreen() {
   const { isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const [showChat, setShowChat] = useState(false);
+  const [proofPhoto, setProofPhoto] = useState<string | null>(null);
 
   const { data: stats, isLoading } = trpc.rider.stats.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -155,6 +158,7 @@ export default function ActiveDeliveryScreen() {
 
   const completeOrder = trpc.rider.completeOrder.useMutation({
     onSuccess: () => {
+      setProofPhoto(null);
       utils.rider.stats.invalidate();
       utils.rider.myOrders.invalidate();
       Alert.alert("ส่งสำเร็จ!", "ส่งอาหารเรียบร้อยแล้ว 🎉");
@@ -162,7 +166,30 @@ export default function ActiveDeliveryScreen() {
     onError: (e) => Alert.alert("ไม่สำเร็จ", e.message),
   });
 
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("ไม่อนุญาต", "กรุณาอนุญาตการใช้กล้องในการตั้งค่า");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.5,
+      allowsEditing: false,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setProofPhoto(result.assets[0].uri);
+    }
+  };
+
   const handleComplete = (orderId: string) => {
+    if (!proofPhoto) {
+      Alert.alert("ต้องถ่ายรูปก่อน", "กรุณาถ่ายรูปยืนยันการส่งอาหาร", [
+        { text: "ถ่ายรูป", onPress: handleTakePhoto },
+        { text: "ยกเลิก", style: "cancel" },
+      ]);
+      return;
+    }
     Alert.alert("ยืนยันการส่ง", "ส่งอาหารให้ลูกค้าเรียบร้อยแล้วใช่ไหม?", [
       { text: "ยกเลิก", style: "cancel" },
       { text: "ส่งแล้ว ✓", onPress: () => completeOrder.mutate(orderId) },
@@ -367,11 +394,31 @@ export default function ActiveDeliveryScreen() {
           </View>
         </View>
 
+        {/* Proof of delivery photo */}
+        <View style={styles.proofSection}>
+          <Text style={styles.proofLabel}>รูปยืนยันการส่ง</Text>
+          {proofPhoto ? (
+            <View style={styles.proofPhotoWrap}>
+              <Image source={{ uri: proofPhoto }} style={styles.proofPhoto} />
+              <TouchableOpacity style={styles.retakeBtn} onPress={handleTakePhoto} activeOpacity={0.8}>
+                <Ionicons name="camera" size={14} color={BLUE} />
+                <Text style={styles.retakeBtnText}>ถ่ายใหม่</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.cameraBtn} onPress={handleTakePhoto} activeOpacity={0.85}>
+              <Ionicons name="camera" size={24} color={BLUE} />
+              <Text style={styles.cameraBtnText}>ถ่ายรูปหน้าบ้านลูกค้า</Text>
+              <Text style={styles.cameraBtnSub}>จำเป็นก่อนกดส่งเสร็จสิ้น</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Complete button */}
         <TouchableOpacity
-          style={[styles.completeBtn, completeOrder.isPending && styles.btnDisabled]}
+          style={[styles.completeBtn, (!proofPhoto || completeOrder.isPending) && styles.btnDisabled]}
           onPress={() => handleComplete(order.id)}
-          disabled={completeOrder.isPending}
+          disabled={!proofPhoto || completeOrder.isPending}
           activeOpacity={0.85}
         >
           <Ionicons name="checkmark-circle" size={22} color="#FFF" />
@@ -461,6 +508,23 @@ const styles = StyleSheet.create({
   earningBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", margin: 14, padding: 14, backgroundColor: "#F0FFF4", borderRadius: 12 },
   earningLabel: { fontSize: 14, color: GREEN },
   earningAmount: { fontSize: 20, fontWeight: "bold", color: GREEN },
+
+  proofSection: {
+    backgroundColor: "#FFFFFF", borderRadius: 16, padding: 14,
+    borderWidth: 1, borderColor: "#E3F2FD",
+  },
+  proofLabel: { fontSize: 11, fontWeight: "700", color: "#999", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 },
+  cameraBtn: {
+    flexDirection: "column", alignItems: "center", justifyContent: "center",
+    gap: 6, padding: 20, borderRadius: 12, borderWidth: 1.5,
+    borderStyle: "dashed", borderColor: BLUE, backgroundColor: "#EBF5FB",
+  },
+  cameraBtnText: { fontSize: 15, fontWeight: "700", color: BLUE },
+  cameraBtnSub: { fontSize: 12, color: "#888" },
+  proofPhotoWrap: { alignItems: "center", gap: 10 },
+  proofPhoto: { width: "100%", height: 180, borderRadius: 12, backgroundColor: "#EEE" },
+  retakeBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
+  retakeBtnText: { fontSize: 13, color: BLUE, fontWeight: "600" },
 
   completeBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
