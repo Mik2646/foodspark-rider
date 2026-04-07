@@ -3,8 +3,12 @@ import { Platform } from "react-native";
 import { createTRPCClient as buildTrpcClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AppRouter } from "@/lib/trpc";
 import { API_BASE_URL, USER_INFO_KEY, SESSION_TOKEN_KEY } from "@/constants/config";
+
+const AS_TOKEN_KEY = "@rider_session_token";
+const AS_USER_KEY = "@rider_user_info";
 
 type RiderUser = {
   id: number;
@@ -40,7 +44,8 @@ async function saveToken(token: string) {
     if (typeof window !== "undefined") localStorage.setItem(SESSION_TOKEN_KEY, token);
     return;
   }
-  await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+  try { await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token); } catch { /* ok */ }
+  await AsyncStorage.setItem(AS_TOKEN_KEY, token);
 }
 
 async function loadToken(): Promise<string | null> {
@@ -48,7 +53,10 @@ async function loadToken(): Promise<string | null> {
     if (typeof window !== "undefined") return localStorage.getItem(SESSION_TOKEN_KEY);
     return null;
   }
-  return SecureStore.getItemAsync(SESSION_TOKEN_KEY);
+  let token: string | null = null;
+  try { token = await SecureStore.getItemAsync(SESSION_TOKEN_KEY); } catch { /* ok */ }
+  if (!token) token = await AsyncStorage.getItem(AS_TOKEN_KEY);
+  return token;
 }
 
 async function clearToken() {
@@ -56,23 +64,40 @@ async function clearToken() {
     if (typeof window !== "undefined") localStorage.removeItem(SESSION_TOKEN_KEY);
     return;
   }
-  await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY);
+  try { await SecureStore.deleteItemAsync(SESSION_TOKEN_KEY); } catch { /* ok */ }
+  await AsyncStorage.removeItem(AS_TOKEN_KEY);
 }
 
-function saveUserInfo(user: RiderUser) {
-  if (typeof window !== "undefined") localStorage.setItem(USER_INFO_KEY, JSON.stringify(user));
+async function saveUserInfo(user: RiderUser) {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined") localStorage.setItem(USER_INFO_KEY, JSON.stringify(user));
+    return;
+  }
+  try { await SecureStore.setItemAsync(USER_INFO_KEY, JSON.stringify(user)); } catch { /* ok */ }
+  await AsyncStorage.setItem(AS_USER_KEY, JSON.stringify(user));
 }
-function loadUserInfo(): RiderUser | null {
+async function loadUserInfo(): Promise<RiderUser | null> {
   try {
-    if (typeof window !== "undefined") {
-      const raw = localStorage.getItem(USER_INFO_KEY);
-      return raw ? JSON.parse(raw) : null;
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem(USER_INFO_KEY);
+        return raw ? JSON.parse(raw) : null;
+      }
+      return null;
     }
-  } catch { /* ignore */ }
-  return null;
+    let raw: string | null = null;
+    try { raw = await SecureStore.getItemAsync(USER_INFO_KEY); } catch { /* ok */ }
+    if (!raw) raw = await AsyncStorage.getItem(AS_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 }
-function clearUserInfo() {
-  if (typeof window !== "undefined") localStorage.removeItem(USER_INFO_KEY);
+async function clearUserInfo() {
+  if (Platform.OS === "web") {
+    if (typeof window !== "undefined") localStorage.removeItem(USER_INFO_KEY);
+    return;
+  }
+  try { await SecureStore.deleteItemAsync(USER_INFO_KEY); } catch { /* ok */ }
+  await AsyncStorage.removeItem(AS_USER_KEY);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -80,16 +105,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const info = loadUserInfo();
-    if (info) {
-      loadToken().then((token) => {
+    loadUserInfo().then(async (info) => {
+      if (info) {
+        const token = await loadToken();
         if (token) setUser(info);
-        else clearUserInfo();
-        setIsLoading(false);
-      });
-    } else {
+        else await clearUserInfo();
+      }
       setIsLoading(false);
-    }
+    });
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -107,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: result.user.role,
       };
       setUser(u);
-      saveUserInfo(u);
+      await saveUserInfo(u);
       return { ok: true };
     } catch (e: any) {
       return { ok: false, error: e?.message ?? "เกิดข้อผิดพลาด" };
@@ -116,7 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     setUser(null);
-    clearUserInfo();
+    await clearUserInfo();
     await clearToken();
   };
 
